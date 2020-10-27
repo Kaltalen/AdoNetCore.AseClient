@@ -9,8 +9,9 @@ namespace AdoNetCore.AseClient.Internal
     internal static class TypeMap
     {
         private const int VarLongBoundary = 255;
-        //Above this length, send strings as TDS_BLOBs
-        private const int StringAsBlobBoundary = 8192;
+        //Above this length in bytes, send strings as TDS_BLOBs
+        private const int AnsiStringAsBlobBoundary = 16384;
+        private const int StringAsBlobBoundary = 16384;
         private const int BinaryAsBlobBoundary = 16384;
 
         private static readonly Dictionary<DbType, Func<object, int, TdsDataType>> DbToTdsMap = new Dictionary<DbType, Func<object, int, TdsDataType>>
@@ -26,7 +27,12 @@ namespace AdoNetCore.AseClient.Internal
             {DbType.UInt64, (value, length) => value == DBNull.Value ? TdsDataType.TDS_UINTN : TdsDataType.TDS_UINT8},
             {DbType.String, (value, length) => length <= StringAsBlobBoundary ? TdsDataType.TDS_LONGBINARY : TdsDataType.TDS_BLOB},
             {DbType.StringFixedLength, (value, length) => TdsDataType.TDS_LONGBINARY},
-            {DbType.AnsiString, (value, length) => length <= VarLongBoundary ? TdsDataType.TDS_VARCHAR : TdsDataType.TDS_LONGCHAR},
+            {DbType.AnsiString, (value, length) =>
+                length <= AnsiStringAsBlobBoundary
+                    ? length <= VarLongBoundary
+                        ? TdsDataType.TDS_VARCHAR
+                        : TdsDataType.TDS_LONGCHAR
+                    : TdsDataType.TDS_BLOB},
             {DbType.AnsiStringFixedLength, (value, length) => length <= VarLongBoundary ? TdsDataType.TDS_VARCHAR : TdsDataType.TDS_LONGCHAR},
             {DbType.Binary, (value, length) =>
                 length <= BinaryAsBlobBoundary
@@ -201,14 +207,28 @@ namespace AdoNetCore.AseClient.Internal
             throw new NotSupportedException($"Unsupported data type {dbType} for parameter '{parameterName}'.");
         }
 
-        public static int GetTdsUserType(DbType dbType)
+        public static int GetUserType(DbType dbType, object value, int? length)
         {
             switch (dbType)
             {
-                case DbType.String:
-                    return 35;
                 case DbType.StringFixedLength:
                     return 34;
+                case DbType.String:
+                    if (DbToTdsMap.TryGetValue(dbType, out var result))
+                    {
+                        var tdsType = result(value, length ?? 0);
+                        switch (tdsType)
+                        {
+                            case TdsDataType.TDS_VARCHAR:
+                            case TdsDataType.TDS_LONGCHAR:
+                                return 34;
+                            case TdsDataType.TDS_LONGBINARY:
+                                return 35;
+                            case TdsDataType.TDS_BLOB:
+                                return 36;
+                        }
+                    }
+                    return 35;
                 default:
                     return 0;
             }

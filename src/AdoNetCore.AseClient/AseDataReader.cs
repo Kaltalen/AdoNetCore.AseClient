@@ -10,6 +10,9 @@ using AdoNetCore.AseClient.Internal;
 
 namespace AdoNetCore.AseClient
 {
+    /// <summary>
+    /// ASE implementation of <see cref="IDataReader"/>
+    /// </summary>
     public sealed class AseDataReader : DbDataReader
     {
         private TableResult _currentTable;
@@ -19,6 +22,7 @@ namespace AdoNetCore.AseClient
         private readonly CommandBehavior _behavior;
         private readonly IInfoMessageEventNotifier _eventNotifier;
         private bool _hasFirst;
+        private int _totalResults;
 
 #if ENABLE_SYSTEM_DATA_COMMON_EXTENSIONS
         private readonly AseCommand _command;
@@ -44,6 +48,8 @@ namespace AdoNetCore.AseClient
         internal void AddResult(TableResult result)
         {
             _results.Add(result);
+            _totalResults++;
+            result.RecordsAffected = _finalRecordsAffected;
 
             // If this is the first data result back, then we should automatically point at it.
             if (!_hasFirst)
@@ -631,8 +637,16 @@ namespace AdoNetCore.AseClient
         }
 
         public override int Depth => 0;
+
         public override bool IsClosed => _currentTable == null;
-        public override int RecordsAffected => _currentTable?.Rows.Count ?? 0;
+        private int _finalRecordsAffected = -1;
+
+        public override int RecordsAffected => _currentTable != null && _currentResult < _totalResults ? _currentTable.RecordsAffected : _finalRecordsAffected;
+
+        public void SetRecordsAffected(int value)
+        {
+            _finalRecordsAffected = value;
+        }
 
         public IList GetList()
         {

@@ -36,7 +36,7 @@ namespace AdoNetCore.AseClient.Internal
 
             PoolSize = 0;
 
-            if (_parameters.MinPoolSize > 0)
+            if (_parameters.Pooling && _parameters.MinPoolSize > 0)
             {
                 Task.Run(TryFillPoolToMinSize);
                 Logger.Instance?.WriteLine("Pool fill task started");
@@ -212,7 +212,6 @@ namespace AdoNetCore.AseClient.Internal
                 catch(Exception ex)
                 {
                     Logger.Instance?.WriteLine($"{nameof(TryFillPoolToMinSize)} exception: {ex}");
-                    RemoveConnection();
                 }
             }
             Logger.Instance?.WriteLine($"{nameof(TryFillPoolToMinSize)} end");
@@ -231,7 +230,6 @@ namespace AdoNetCore.AseClient.Internal
                 catch (Exception ex)
                 {
                     Logger.Instance?.WriteLine($"{nameof(TryReplaceConnection)} exception: {ex}");
-                    RemoveConnection();
                 }
             }
         }
@@ -260,7 +258,10 @@ namespace AdoNetCore.AseClient.Internal
                 }
                 finally
                 {
-                    PoolSize--;
+                    if (PoolSize > 0)
+                    {
+                        PoolSize--;
+                    }
                 }
             }
         }
